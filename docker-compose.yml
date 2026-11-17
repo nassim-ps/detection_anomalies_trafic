@@ -1,3 +1,5 @@
+# Développement : image ML construite depuis ./ml, code monté en volume.
+# Installation rapide depuis Docker Hub : voir compose.prod.yml.
 services:
   postgres:
     image: postgres:16
@@ -5,12 +7,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: umami
-      ML_READER_PASSWORD: ${ML_READER_PASSWORD}
-      ML_WRITER_PASSWORD: ${ML_WRITER_PASSWORD}
     ports: ["5433:5432"]  # 5432 souvent pris par un PostgreSQL local
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./ml/sql:/docker-entrypoint-initdb.d:ro
+    volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d umami"]
       interval: 5s
@@ -30,13 +28,28 @@ services:
       interval: 10s
       retries: 30
 
+  # Rôles, schéma ml, tables et vues (idempotent), une fois Umami migré.
+  init:
+    build: { context: ./ml, target: dev }
+    entrypoint: ["sh", "sql/init.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGDATABASE: umami
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      ML_READER_PASSWORD: ${ML_READER_PASSWORD}
+      ML_WRITER_PASSWORD: ${ML_WRITER_PASSWORD}
+    volumes: ["./ml:/app"]
+    depends_on:
+      umami: { condition: service_healthy }
+
   web:
     image: nginx:alpine
     volumes: ["./web:/usr/share/nginx/html:ro"]
     ports: ["8080:80"]
 
   sim:
-    build: ./ml
+    build: { context: ./ml, target: dev }
     profiles: ["tools"]
     env_file: .env
     environment:
@@ -45,7 +58,7 @@ services:
       UMAMI_URL: http://umami:3000
     volumes: ["./ml:/app"]
     depends_on:
-      umami: { condition: service_healthy }
+      init: { condition: service_completed_successfully }
 
 volumes:
   pgdata:

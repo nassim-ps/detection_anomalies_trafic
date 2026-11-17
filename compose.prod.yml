@@ -1,0 +1,59 @@
+# Installation rapide : images publiées, aucun build ni clone du code nécessaire.
+#   docker compose -f compose.prod.yml up -d
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?à définir dans .env}
+      POSTGRES_DB: umami
+    ports: ["5433:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d umami"]
+      interval: 5s
+      retries: 20
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc  # Umami 3.5.0
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET:?à définir dans .env}
+      DISABLE_BOT_CHECK: "1"
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/heartbeat || exit 1"]
+      interval: 10s
+      retries: 30
+
+  init:
+    image: ${ML_IMAGE:-nassimphenix/detection-anomalies-trafic:latest}
+    entrypoint: ["sh", "sql/init.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: postgres
+      PGDATABASE: umami
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      ML_READER_PASSWORD: ${ML_READER_PASSWORD:?à définir dans .env}
+      ML_WRITER_PASSWORD: ${ML_WRITER_PASSWORD:?à définir dans .env}
+    depends_on:
+      umami: { condition: service_healthy }
+
+  # docker compose -f compose.prod.yml run --rm sim simulate --plan scenarios/eval_v1.yaml --start ... --end ...
+  sim:
+    image: ${ML_IMAGE:-nassimphenix/detection-anomalies-trafic:latest}
+    profiles: ["tools"]
+    environment:
+      PG_DSN_READER: postgresql://ml_reader:${ML_READER_PASSWORD}@postgres:5432/umami
+      PG_DSN_WRITER: postgresql://ml_writer:${ML_WRITER_PASSWORD}@postgres:5432/umami
+      UMAMI_URL: http://umami:3000
+      UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
+    depends_on:
+      init: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:

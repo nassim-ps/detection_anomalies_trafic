@@ -1,38 +1,52 @@
-# Detection d'anomalies de trafic à l'aide de scenarios simulés
+# Détection d'anomalies de trafic sur scénarios simulés
 
-Le simulateur joue des scénarios (normal, pic, bot, panne, changement de comportement). Umami collecte les événements dans PostgreSQL. La couche ML détecte ces situations, et la couche MLOps entraîne, versionne, sert et surveille les modèles, puis les ré-entraîne quand le comportement change.
+Un simulateur rejoue des scénarios (normal, pic, bot, panne, changement de comportement) vers **Umami**, qui stocke tout dans **PostgreSQL**. La couche ML apprend à les détecter.
 
-- Spécification : [cdr/spec.md](cdr/spec.md)
-- Diagramme de flux : [cdr/diagramme_de_flux.excalidraw](cdr/diagramme_de_flux.excalidraw)
+[Spécification](cdr/spec.md) · [Diagramme de flux](cdr/diagramme_de_flux.excalidraw)
 
-## Démarrage
+## Installation rapide
 
-Prérequis : Docker Desktop, et Python 3.12 (via [uv](https://docs.astral.sh/uv/)) pour lancer les tests depuis l'hôte.
-
-1. **Configuration** : `cp .env.example .env`, puis remplacer chaque `change-me` (les mots de passe `ML_*_PASSWORD` doivent aussi être reportés dans `PG_DSN_*`).
-2. **Services** : `docker compose up -d` démarre PostgreSQL (port hôte **5433**), Umami 3.5.0 (`http://localhost:3000`) et la page web (`http://localhost:8080`).
-   Au premier démarrage, PostgreSQL crée les rôles `ml_reader` / `ml_writer`, le schéma `ml` et ses tables (`ml/sql/*.sh|*.sql`).
-3. **Umami** : se connecter avec `admin` / `umami` et **changer ce mot de passe**. Créer un site (domaine `localhost`), puis reporter son identifiant dans `.env` (`UMAMI_WEBSITE_ID`) et dans `web/index.html`.
-4. **Vues de lecture** (une fois, après le premier démarrage d'Umami) :
-   ```bash
-   MSYS_NO_PATHCONV=1 docker compose exec -T postgres psql -U postgres umami -f /docker-entrypoint-initdb.d/views/20_views.sql
-   ```
-5. **Simuler le jeu d'évaluation** :
-   ```bash
-   docker compose run --rm sim python cli.py simulate --plan scenarios/eval_v1.yaml --start 2026-01-05T00:00Z --end 2026-01-19T00:00Z
-   ```
-
-## Rejouer une période
-
-Le pipeline n'a pas le droit d'écrire dans les tables d'Umami : les événements déjà envoyés ne peuvent pas être effacés. `ml.ground_truth` est réécrit sans doublon, mais rejouer une fenêtre **double les événements Umami**. Pour repartir de zéro : `docker compose down -v`, puis reprendre le démarrage.
-
-Les tests d'intégration utilisent un plan daté de 2025 (`ml/tests/data_plan_test.yaml`) pour ne jamais toucher la période de `eval_v1` (2026).
-
-## Tests
+Prérequis : Docker. Il faut seulement [`compose.prod.yml`](compose.prod.yml) et un `.env` (modèle : [`.env.example`](.env.example)).
 
 ```bash
-cd ml
-uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python .venv/Scripts/python.exe
-.venv/Scripts/python -m pytest            # tests unitaires
-.venv/Scripts/python -m pytest -m db      # intégration (services docker lancés, vues appliquées)
+cp .env.example .env                          # remplacer chaque change-me
+docker compose -f compose.prod.yml up -d      # PostgreSQL :5433, Umami :3000, puis init de la base
 ```
+
+Sur Umami (`http://localhost:3000`) :
+
+1. Se connecter avec `admin` / `umami`, puis changer ce mot de passe.
+2. Créer un site.
+3. Reporter son identifiant dans `.env` (`UMAMI_WEBSITE_ID`).
+
+Ensuite, jouer le jeu d'évaluation :
+
+```bash
+docker compose -f compose.prod.yml run --rm sim simulate \
+  --plan scenarios/eval_v1.yaml --start 2026-01-05T00:00Z --end 2026-01-19T00:00Z
+```
+
+> Rejouer une période **double les événements dans Umami**, car le pipeline n'y écrit jamais. Pour repartir de zéro : `docker compose -f compose.prod.yml down -v`.
+
+## Développement
+
+```bash
+docker compose up -d                          # même pile, image construite depuis ./ml + page web :8080
+docker compose run --rm sim python cli.py simulate --plan ... --start ... --end ...
+
+cd ml && uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python .venv/Scripts/python.exe
+.venv/Scripts/python -m pytest                # unitaires
+.venv/Scripts/python -m pytest -m db          # intégration (pile docker lancée)
+```
+
+## Image et CI
+
+La CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) lance les tests, puis publie l'image sur `nassimphenix/detection-anomalies-trafic` :
+
+- sur un push vers `main`, avec les tags `latest` et `sha-…` ;
+- sur une pull request vers `main`, avec le tag `pr-N`.
+
+Pour que la CI puisse publier, déclarer dans GitHub (Settings → Secrets and variables → Actions) :
+
+- la variable `DOCKERHUB_USERNAME` ;
+- le secret `DOCKERHUB_TOKEN`.

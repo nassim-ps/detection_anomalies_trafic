@@ -1,6 +1,5 @@
 -- Vues de lecture sur les tables Umami (schéma vérifié sur Umami 3.5.0).
--- À appliquer APRÈS le premier démarrage d'Umami (ses tables doivent exister) :
---   docker compose exec -T postgres psql -U postgres umami -f /docker-entrypoint-initdb.d/views/20_views.sql
+-- Appliquées par sql/init.sh après le démarrage d'Umami (ses tables doivent exister).
 -- Le pipeline ne lit Umami QUE via ces vues.
 
 GRANT USAGE ON SCHEMA public TO ml_reader;

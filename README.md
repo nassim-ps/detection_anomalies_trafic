@@ -1,52 +1,39 @@
-# Détection d'anomalies de trafic sur scénarios simulés
+# Detection d'anomalies de trafic à l'aide de scenarios simulés
 
-Un simulateur rejoue des scénarios (normal, pic, bot, panne, changement de comportement) vers **Umami**, qui stocke tout dans **PostgreSQL**. La couche ML apprend à les détecter.
+Le simulateur joue des scénarios (normal, pic, bot, panne, changement de comportement). Umami collecte les événements dans PostgreSQL. La couche ML détecte ces situations, et la couche MLOps entraîne, versionne, sert et surveille les modèles, puis les ré-entraîne quand le comportement change.
 
-[Spécification](cdr/spec.md) · [Diagramme de flux](cdr/diagramme_de_flux.excalidraw)
+[Spec](cdr/spec.md) · [Flux](cdr/diagramme_de_flux.excalidraw)
 
-## Installation rapide
-
-Prérequis : Docker. Il faut seulement [`compose.prod.yml`](compose.prod.yml) et un `.env` (modèle : [`.env.example`](.env.example)).
+## Installer
 
 ```bash
-cp .env.example .env                          # remplacer chaque change-me
-docker compose -f compose.prod.yml up -d      # PostgreSQL :5433, Umami :3000, puis init de la base
+cp .env.example .env    # remplacer les change-me
+docker compose -f compose.prod.yml up -d
 ```
 
-Sur Umami (`http://localhost:3000`) :
+Sur http://localhost:3000, se connecter avec `admin` / `umami`, puis :
 
-1. Se connecter avec `admin` / `umami`, puis changer ce mot de passe.
+1. Changer le mot de passe.
 2. Créer un site.
-3. Reporter son identifiant dans `.env` (`UMAMI_WEBSITE_ID`).
+3. Copier son identifiant dans `UMAMI_WEBSITE_ID` du `.env`.
 
-Ensuite, jouer le jeu d'évaluation :
+## Simuler
 
 ```bash
-docker compose -f compose.prod.yml run --rm sim simulate \
-  --plan scenarios/eval_v1.yaml --start 2026-01-05T00:00Z --end 2026-01-19T00:00Z
+docker compose -f compose.prod.yml run --rm sim simulate --plan scenarios/eval_v1.yaml --start 2026-01-05T00:00Z --end 2026-01-19T00:00Z
 ```
 
-> Rejouer une période **double les événements dans Umami**, car le pipeline n'y écrit jamais. Pour repartir de zéro : `docker compose -f compose.prod.yml down -v`.
+Rejouer une période duplique les événements. Pour tout effacer : `docker compose -f compose.prod.yml down -v`.
 
-## Développement
+## Développer
 
 ```bash
-docker compose up -d                          # même pile, image construite depuis ./ml + page web :8080
-docker compose run --rm sim python cli.py simulate --plan ... --start ... --end ...
-
+docker compose up -d
 cd ml && uv venv --python 3.12 .venv && uv pip install -e ".[dev]" --python .venv/Scripts/python.exe
-.venv/Scripts/python -m pytest                # unitaires
-.venv/Scripts/python -m pytest -m db          # intégration (pile docker lancée)
+.venv/Scripts/python -m pytest          # unitaires
+.venv/Scripts/python -m pytest -m db    # intégration
 ```
 
-## Image et CI
+## CI
 
-La CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) lance les tests, puis publie l'image sur `nassimphenix/detection-anomalies-trafic` :
-
-- sur un push vers `main`, avec les tags `latest` et `sha-…` ;
-- sur une pull request vers `main`, avec le tag `pr-N`.
-
-Pour que la CI puisse publier, déclarer dans GitHub (Settings → Secrets and variables → Actions) :
-
-- la variable `DOCKERHUB_USERNAME` ;
-- le secret `DOCKERHUB_TOKEN`.
+À chaque push ou PR vers `main`, la CI lance les tests puis publie l'image `nassimphenix/detection-anomalies-trafic`. Elle a besoin, dans GitHub, de la variable `DOCKERHUB_USERNAME` et du secret `DOCKERHUB_TOKEN`.

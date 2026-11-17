@@ -22,35 +22,29 @@ FROM public.website_event e
 JOIN public.session s USING (session_id)
 WHERE e.event_type = 1;
 
--- Trafic par tranche de 5 min, une ligne par tranche même sans événement.
-CREATE OR REPLACE VIEW ml.v_traffic_5m AS
-WITH bornes AS (
-    SELECT website_id,
-           date_bin('5 minutes', min(created_at), timestamptz '2000-01-01') AS t0,
-           date_bin('5 minutes', max(created_at), timestamptz '2000-01-01') AS t1
-    FROM public.website_event
-    WHERE event_type = 1
-    GROUP BY website_id
-),
-grille AS (
-    SELECT b.website_id, g.bucket
-    FROM bornes b,
-         generate_series(b.t0, b.t1, interval '5 minutes') AS g(bucket)
-),
-agg AS (
-    SELECT website_id,
-           date_bin('5 minutes', created_at, timestamptz '2000-01-01') AS bucket,
-           count(*)                   AS pages_vues,
-           count(DISTINCT session_id) AS visiteurs
-    FROM public.website_event
-    WHERE event_type = 1
-    GROUP BY 1, 2
-)
-SELECT g.website_id,
-       g.bucket,
-       coalesce(a.pages_vues, 0)::int AS pages_vues,
-       coalesce(a.visiteurs, 0)::int  AS visiteurs
-FROM grille g
-LEFT JOIN agg a USING (website_id, bucket);
+-- Trafic par tranche de 5 min sur [debut, fin[ : une ligne par tranche, même sans événement
+-- (y compris avant le premier et après le dernier événement : une panne en cours apparaît à 0).
+DROP VIEW IF EXISTS ml.v_traffic_5m;
+CREATE OR REPLACE FUNCTION ml.traffic_5m(site uuid, debut timestamptz, fin timestamptz)
+RETURNS TABLE (bucket timestamptz, pages_vues int, visiteurs int)
+LANGUAGE sql STABLE AS $$
+    WITH grille AS (
+        SELECT g AS bucket
+        FROM generate_series(date_bin('5 minutes', debut, timestamptz '2000-01-01'),
+                             fin - interval '1 microsecond', interval '5 minutes') g
+    ),
+    agg AS (
+        SELECT date_bin('5 minutes', created_at, timestamptz '2000-01-01') AS bucket,
+               count(*) AS n, count(DISTINCT session_id) AS v
+        FROM public.website_event
+        WHERE website_id = site AND event_type = 1
+          AND created_at >= debut AND created_at < fin
+        GROUP BY 1
+    )
+    SELECT g.bucket, coalesce(a.n, 0)::int, coalesce(a.v, 0)::int
+    FROM grille g LEFT JOIN agg a USING (bucket)
+    ORDER BY g.bucket
+$$;
+GRANT EXECUTE ON FUNCTION ml.traffic_5m(uuid, timestamptz, timestamptz) TO ml_reader;
 
 RESET ROLE;

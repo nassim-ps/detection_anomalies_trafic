@@ -23,3 +23,10 @@ def test_simulate_logs_run(settings, conn):
     n = simulate(PLAN, D0, D0 + timedelta(hours=1), settings)
     assert conn.execute(
         "SELECT etape, statut, nb_lignes FROM ml.runs ORDER BY id DESC LIMIT 1").fetchone() == ("simulate", "succes", n)
+
+
+def test_simulate_fails_when_events_rejected(settings, conn):
+    broken = settings.model_copy(update={"umami_url": "http://127.0.0.1:9"})
+    with pytest.raises(RuntimeError, match="rejet"):
+        simulate(PLAN, D0, D0 + timedelta(minutes=30), broken)
+    assert conn.execute("SELECT statut FROM ml.runs ORDER BY id DESC LIMIT 1").fetchone()[0] == "echec"

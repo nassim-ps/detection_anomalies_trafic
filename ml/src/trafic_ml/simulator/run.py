@@ -28,8 +28,12 @@ def simulate(plan_path: Path, start: datetime, end: datetime, settings: Settings
     """Envoie les événements de [start, end[ ; retourne le nombre d'événements acceptés."""
     plan = load_plan(plan_path)
     with connect(settings.pg_dsn_writer) as conn, track_run(conn, "simulate", start, end) as run:
+        events = list(generate(plan, start, end))
         with httpx.Client(base_url=settings.umami_url, timeout=10) as client:
-            n = send(generate(plan, start, end), settings, client)
+            n = send(events, settings, client)
+        if n < len(events):
+            # Umami n'est pas effaçable : un envoi partiel fausserait la vérité terrain.
+            raise RuntimeError(f"{len(events) - n}/{len(events)} événements rejetés par Umami")
         replace_window(conn, "ml.ground_truth", "debut", start, end,
                        ground_truth_rows(plan, start, end))
         run.nb_lignes = n

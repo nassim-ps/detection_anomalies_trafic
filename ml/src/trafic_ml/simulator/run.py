@@ -7,6 +7,7 @@ import httpx
 
 from ..config import Settings
 from ..db import connect, replace_window
+from ..runs import track_run
 from .events import generate
 from .umami import send
 from .scenarios import Plan, load_plan
@@ -26,9 +27,10 @@ def ground_truth_rows(plan: Plan, start: datetime, end: datetime) -> list[dict]:
 def simulate(plan_path: Path, start: datetime, end: datetime, settings: Settings) -> int:
     """Envoie les événements de [start, end[ ; retourne le nombre d'événements acceptés."""
     plan = load_plan(plan_path)
-    with httpx.Client(base_url=settings.umami_url, timeout=10) as client:
-        n = send(generate(plan, start, end), settings, client)
-    with connect(settings.pg_dsn_writer) as conn:
+    with connect(settings.pg_dsn_writer) as conn, track_run(conn, "simulate", start, end) as run:
+        with httpx.Client(base_url=settings.umami_url, timeout=10) as client:
+            n = send(generate(plan, start, end), settings, client)
         replace_window(conn, "ml.ground_truth", "debut", start, end,
                        ground_truth_rows(plan, start, end))
+        run.nb_lignes = n
     return n

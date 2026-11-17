@@ -17,3 +17,9 @@ def test_simulate_writes_ground_truth_idempotently(settings, conn):
     rows = conn.execute("SELECT scenario, debut, fin FROM ml.ground_truth ORDER BY debut").fetchall()
     assert [r[0] for r in rows] == ["pic", "panne"]
     assert rows[0][2] - rows[0][1] == timedelta(minutes=30)
+
+
+def test_simulate_logs_run(settings, conn):
+    n = simulate(PLAN, D0, D0 + timedelta(hours=1), settings)
+    assert conn.execute(
+        "SELECT etape, statut, nb_lignes FROM ml.runs ORDER BY id DESC LIMIT 1").fetchone() == ("simulate", "succes", n)

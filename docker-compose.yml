@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: umami
+      ML_READER_PASSWORD: ${ML_READER_PASSWORD}
+      ML_WRITER_PASSWORD: ${ML_WRITER_PASSWORD}
+    ports: ["5433:5432"]  # 5432 souvent pris par un PostgreSQL local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./ml/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d umami"]
+      interval: 5s
+      retries: 20
+
+  umami:
+    image: ghcr.io/umami-software/umami:postgresql-latest@sha256:b64f40400d77bcadd39cf5c62a1e368c99524ca442024f96e1133355a19a5dbc  # Umami 3.5.0
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/umami
+      APP_SECRET: ${UMAMI_APP_SECRET}
+      DISABLE_BOT_CHECK: "1"
+    ports: ["3000:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/heartbeat || exit 1"]
+      interval: 10s
+      retries: 30
+
+  web:
+    image: nginx:alpine
+    volumes: ["./web:/usr/share/nginx/html:ro"]
+    ports: ["8080:80"]
+
+  sim:
+    build: ./ml
+    profiles: ["tools"]
+    env_file: .env
+    environment:
+      PG_DSN_READER: postgresql://ml_reader:${ML_READER_PASSWORD}@postgres:5432/umami
+      PG_DSN_WRITER: postgresql://ml_writer:${ML_WRITER_PASSWORD}@postgres:5432/umami
+      UMAMI_URL: http://umami:3000
+    volumes: ["./ml:/app"]
+    depends_on:
+      umami: { condition: service_healthy }
+
+volumes:
+  pgdata:

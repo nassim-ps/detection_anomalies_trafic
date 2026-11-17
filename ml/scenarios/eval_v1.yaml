@@ -1,0 +1,16 @@
+# Jeu d'évaluation fixe v1 : 14 jours, un scénario de chaque type.
+# Ne pas modifier : créer eval_v2.yaml pour tout changement.
+seed: 20260105
+debut: 2026-01-05T00:00:00Z
+fin: 2026-01-19T00:00:00Z
+base:
+  volume_moyen: 600
+  amplitude_jour_nuit: 0.7
+  bruit: 0.15
+  pages: ["/", "/produits", "/produits/a", "/produits/b", "/blog", "/contact", "/a-propos"]
+  referents: ["", "", "https://www.google.com/", "https://www.bing.com/", "https://www.linkedin.com/", "https://news.ycombinator.com/"]
+scenarios:
+  - {type: pic, debut: 2026-01-07T14:00:00Z, duree: PT45M, facteur: 5}
+  - {type: bot, debut: 2026-01-09T02:00:00Z, duree: PT2H, part: 0.3}
+  - {type: panne, debut: 2026-01-12T10:00:00Z, duree: PT1H30M}
+  - {type: changement, debut: 2026-01-15T00:00:00Z, ampleur: 0.4, pages: ["/blog"]}

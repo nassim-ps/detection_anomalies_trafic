@@ -1,0 +1,14 @@
+# Plan réservé aux tests (2025) : n'interfère pas avec eval_v1 (2026).
+seed: 7
+debut: 2025-06-02T00:00:00Z
+fin: 2025-06-03T00:00:00Z
+base:
+  volume_moyen: 120
+  amplitude_jour_nuit: 0.5
+  bruit: 0.1
+  pages: ["/", "/a", "/b"]
+  referents: ["", "https://www.google.com/"]
+scenarios:
+  - {type: pic, debut: 2025-06-02T10:00:00Z, duree: PT30M, facteur: 4}
+  - {type: panne, debut: 2025-06-02T12:00:00Z, duree: PT20M}
+  - {type: bot, debut: 2025-06-02T20:00:00Z, duree: PT1H, part: 0.2}

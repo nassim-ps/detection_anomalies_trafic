@@ -28,3 +28,10 @@ def reader_conn(settings):
     yield c
     c.rollback()
     c.close()
+
+
+@pytest.fixture
+def settings_obj():
+    from trafic_ml.config import Settings
+    return Settings(_env_file=None, pg_dsn_reader="x", pg_dsn_writer="x",
+                    umami_url="http://umami", umami_website_id="wid")

@@ -23,5 +23,6 @@ packages = ["src/trafic_ml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = ["db: nécessite les services docker compose (postgres, umami)"]
 addopts = "-m 'not db'"

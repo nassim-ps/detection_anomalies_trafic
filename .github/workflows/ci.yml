@@ -24,6 +24,7 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          activate-environment: true  # crée et active .venv pour les étapes suivantes
       - run: uv pip install -e ".[dev]"
       - run: python -m pytest
 
